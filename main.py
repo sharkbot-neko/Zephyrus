@@ -12,7 +12,7 @@ intents.members = True
 intents.guilds = True
 intents.presences = True
 
-bot = commands.AutoShardedBot(command_prefix="zd!", intents=intents, help_command=None)
+bot = commands.AutoShardedBot(command_prefix="z!", intents=intents, help_command=None)
 
 # ===== 許可するユーザーID =====
 ALLOWED_USER_IDS = [
@@ -33,13 +33,17 @@ async def on_ready():
     bot.loop.create_task(status_task())
 
 async def status_task():
-    total_guilds = len(bot.guilds)
-    total_users = sum(g.member_count for g in bot.guilds if g.member_count)
     while True:
+        total_guilds = len(bot.guilds)
+        total_users = sum(g.member_count for g in bot.guilds if g.member_count)
+
         for shard_id in range(bot.shard_count):
-            activity = discord.Game(name=f"{total_guilds}サーバー | {total_users}ユーザー | シャード{shard_id + 1}/{bot.shard_count}")
+            activity = discord.Game(
+                name=f"{total_guilds}サーバー | {total_users}ユーザー | シャード{shard_id + 1}/{bot.shard_count}"
+            )
             await bot.change_presence(status=discord.Status.online, activity=activity)
-            await asyncio.sleep(15)  # 15秒ごとに表示を切り替え
+            await asyncio.sleep(15)  # シャードごとに表示
+
 
 @bot.event
 async def setup_hook():
