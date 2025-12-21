@@ -1,0 +1,8 @@
+discord.py[voice]
+aiosqlite
+pillow
+python-dotenv
+google-generativeai
+motor
+pymongo
+psutil
