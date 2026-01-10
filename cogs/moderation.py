@@ -17,6 +17,29 @@ warns_collection = db["warnings"]
 serverlog_db = mongo_client["serverlog"]
 serverlog_collection = serverlog_db["channel.serverlog.channel"]
 
+def can_moderate(actor: discord.Member, target: discord.Member, bot_member: discord.Member) -> tuple[bool, str | None]:
+    # サーバーオーナーは無条件でOK
+    if actor.id == actor.guild.owner_id:
+        return True, None
+
+    # 自分自身を処罰できない
+    if actor.id == target.id:
+        return False, "自分自身を処罰することはできません。"
+
+    # 対象がサーバーオーナー
+    if target.id == actor.guild.owner_id:
+        return False, "サーバーオーナーを処罰することはできません。"
+
+    # 実行者 vs 対象（ロール階層）
+    if target.top_role >= actor.top_role:
+        return False, "あなたと同等、またはそれ以上の権限を持つユーザーは処罰できません。"
+
+    # Bot vs 対象（ロール階層）
+    if target.top_role >= bot_member.top_role:
+        return False, "Botの権限が不足しています（ロール階層が上です）。"
+
+    return True, None
+
 class Moderation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -104,6 +127,12 @@ class Moderation(commands.Cog):
         if guild is None:
             return await ctx.reply("このコマンドはサーバー内でのみ使用できます。")
 
+        bot_member = ctx.guild.me
+
+        ok, error = can_moderate(ctx.author, member, bot_member)
+        if not ok:
+            return await ctx.reply(f"<:cross:1394240624202481705>{error}")
+
         # プレフィックスコマンドの場合、userが文字列(ID)かもしれない
         if isinstance(user, str):
             try:
@@ -135,7 +164,13 @@ class Moderation(commands.Cog):
     @app_commands.describe(user_id="BANを解除するユーザーのID", reason="理由を入力")
     @app_commands.rename(user_id="ユーザーid", reason="理由")
     @commands.has_permissions(ban_members=True)
-    async def unban(self, ctx, user_id: int, reason: str = "理由なし"):
+    async def unban(self, ctx, user_id: str, reason: str = "理由なし"):
+        bot_member = ctx.guild.me
+
+        ok, error = can_moderate(ctx.author, member, bot_member)
+        if not ok:
+            return await ctx.reply(f"<:cross:1394240624202481705>{error}")
+
         try:
             user = await self.bot.fetch_user(user_id)
             await ctx.guild.unban(user, reason=reason)
@@ -153,6 +188,12 @@ class Moderation(commands.Cog):
     @app_commands.rename(member="ユーザー", reason="理由")
     @commands.has_permissions(kick_members=True)
     async def kick(self, ctx: commands.Context, member: discord.Member, *, reason: str = "理由なし"):
+        bot_member = ctx.guild.me
+
+        ok, error = can_moderate(ctx.author, member, bot_member)
+        if not ok:
+            return await ctx.reply(f"<:cross:1394240624202481705>{error}")
+
         try:
             await member.kick(reason=reason)
             await ctx.reply(f"<:check:1394240622310850580>{member.mention}をキックしました。")
@@ -167,6 +208,12 @@ class Moderation(commands.Cog):
     @app_commands.rename(member="ユーザー", duration="期間", reason="理由")
     @commands.has_permissions(moderate_members=True)
     async def timeout(self, ctx: commands.Context, member: discord.Member, duration: str, *, reason: str = "理由なし"):
+        bot_member = ctx.guild.me
+
+        ok, error = can_moderate(ctx.author, member, bot_member)
+        if not ok:
+            return await ctx.reply(f"<:cross:1394240624202481705>{error}")
+
         time_delta = self.parse_duration(duration)
         if not time_delta:
             await ctx.reply(f"<:cross:1394240624202481705>時間の形式が無効です。例: `1m`, `2h`, `3d`")
@@ -186,6 +233,12 @@ class Moderation(commands.Cog):
     @app_commands.rename(member="ユーザー", reason="理由")
     @commands.has_permissions(moderate_members=True)
     async def untimeout(self, ctx: commands.Context, member: discord.Member, *, reason: str = "理由なし"):
+        bot_member = ctx.guild.me
+
+        ok, error = can_moderate(ctx.author, member, bot_member)
+        if not ok:
+            return await ctx.reply(f"<:cross:1394240624202481705>{error}")
+
         try:
             await member.timeout(None, reason=reason)
             await ctx.reply(f"<:check:1394240622310850580>{member.mention}のタイムアウトを解除しました。")
@@ -200,6 +253,12 @@ class Moderation(commands.Cog):
     @app_commands.rename(member="ユーザー", reason="理由")
     @commands.has_permissions(moderate_members=True)
     async def warn(self, ctx: commands.Context, member: discord.Member, *, reason: str = "理由なし"):
+        bot_member = ctx.guild.me
+
+        ok, error = can_moderate(ctx.author, member, bot_member)
+        if not ok:
+            return await ctx.reply(f"<:cross:1394240624202481705>{error}")
+
         warns_collection.insert_one({
             "user_id": member.id,
             "guild_id": ctx.guild.id,
@@ -299,6 +358,12 @@ class Moderation(commands.Cog):
     @app_commands.rename(member="ユーザー", reason="理由")
     @commands.has_permissions(ban_members=True)
     async def softban(self, ctx: commands.Context, member: discord.Member, *, reason: str = "理由なし"):
+        bot_member = ctx.guild.me
+
+        ok, error = can_moderate(ctx.author, member, bot_member)
+        if not ok:
+            return await ctx.reply(f"<:cross:1394240624202481705>{error}")
+
         try:
             await member.ban(reason=reason, delete_message_days=1)
             await member.unban(reason="ソフトBAN解除")
@@ -314,6 +379,12 @@ class Moderation(commands.Cog):
     @app_commands.rename(ids="ユーザーid", reason="理由")
     @commands.has_permissions(ban_members=True)
     async def massban(self, ctx: commands.Context, ids: str, *, reason: str = "理由なし"):
+        bot_member = ctx.guild.me
+
+        ok, error = can_moderate(ctx.author, member, bot_member)
+        if not ok:
+            return await ctx.reply(f"<:cross:1394240624202481705>{error}")
+            
         user_ids = [uid.strip() for uid in ids.split(",")]
         success = []
         failed = []
